@@ -1,2 +1,44 @@
-# Alchemist
-Alchemist: The modern, drag-and-drop media converter. Transform WebP, GIF, MP4, MKV, and audio files with a simple, powerful GUI. No more command-line headaches.
+# Alchemist - Universal Media Converter
+
+![Python](https://img.shields.io/badge/Python-3.6%2B-blue?logo=python)
+![License](https://img.shields.io/badge/License-MIT-green)
+![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)
+
+**Alchemist** is a powerful, user-friendly desktop application built to simplify media conversion. It transforms a complex process into a simple drag-and-drop experience, supporting a wide range of popular formats.
+
+Turn animated WebPs into MP4s or GIFs, convert between video formats, extract audio, and ensure perfect compatibility for devices like the PlayStation 3—all without ever touching a command line.
+
+![Alchemist GUI Demo](https://via.placeholder.com/800x500.png?text=Alchemist+GUI+Screenshot) *// Replace with an actual screenshot of your app later*
+
+## ✨ Features
+
+**Alchemist provides a potent mix of conversion powers:**
+
+*   **🔄 Versatile Conversions:**
+    *   **WebP → MP4:** Perfectly converts animated WebPs to high-quality MP4 videos.
+    *   **WebP → GIF:** Creates smooth, high-quality GIFs from animated WebPs with proper transparency handling.
+    *   **MP4 ↔ GIF:** Seamlessly convert between video and GIF formats.
+    *   **MKV → MP4 (PS3 Compatible):** Smart conversion that ensures perfect playback on PlayStation 3 and other legacy devices.
+    *   **Audio Extraction:** Pull audio tracks directly from video files.
+    *   **Any Audio → MP3:** Convert any audio file (FLAC, M4A, WAV, etc.) to high-quality 320kbps MP3.
+
+*   **🎯 Smart & Powerful:**
+    *   **PS3-Optimized:** Automatically uses the correct H.264 `yuv420p` video and AAC audio settings for guaranteed console compatibility.
+    *   **Smart Encoding:** Analyzes source files to avoid unnecessary re-encoding, saving time and preserving quality.
+    *   **High-Quality Output:** Uses intelligent defaults (like CRF 23 and adaptive palettes) for the best balance of size and quality.
+
+*   **💻 User-Friendly GUI:**
+    *   **Drag & Drop:** Simply drag files onto the window to add them to the queue.
+    *   **Batch Processing:** Convert multiple files at once.
+    *   **Progress Tracking:** Monitor conversions with a real-time progress bar and detailed log.
+    *   **Pause/Stop:** Full control over long conversion tasks.
+
+## 🚀 Installation & Usage
+
+### Prerequisites
+*   **Python 3.6 or higher**
+*   **FFmpeg** (for GIF/MP4/MKV/Audio conversions). The app looks for it in an `ffmpeg/bin/` folder.
+
+### 1. Install Dependencies
+```bash
+pip install -r requirements.txt
