@@ -53,8 +53,7 @@ Alchemist/
 │ └── bin/
 │ ├── ffmpeg.exe
 │ ├── ffprobe.exe
-│ ├── avcodec-60.dll
-│ └── ... (all other DLLs)
+│ ├── ...
 ├── requirements.txt
 └── README.md
 ```
