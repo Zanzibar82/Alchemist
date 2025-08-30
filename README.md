@@ -44,6 +44,21 @@ Turn animated WebPs into MP4s or GIFs, convert between video formats, extract au
 pip install -r requirements.txt
 ```
 
+Make sure folder structure is as follows:
+
+Alchemist/
+├── Alchemist.py
+├── get_ffmpeg.py
+├── ffmpeg/
+│ └── bin/
+│ ├── ffmpeg.exe
+│ ├── ffprobe.exe
+│ ├── avcodec-60.dll
+│ └── ... (all other DLLs)
+├── requirements.txt
+└── README.md
+
+
 ## 📜 License ----------------
 
 Distributed under the MIT License. See `LICENSE` for more information.
