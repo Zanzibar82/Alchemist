@@ -42,7 +42,7 @@ Turn animated WebPs into MP4s or GIFs, convert between video formats, extract au
 ### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
-
+```
 
 ## 📜 License ----------------
 
