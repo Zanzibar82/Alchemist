@@ -45,7 +45,7 @@ pip install -r requirements.txt
 ```
 
 Make sure folder structure is as follows:
-
+```bash
 Alchemist/
 ├── Alchemist.py
 ├── get_ffmpeg.py
@@ -57,7 +57,7 @@ Alchemist/
 │ └── ... (all other DLLs)
 ├── requirements.txt
 └── README.md
-
+```
 
 ## 📜 License ----------------
 
