@@ -8,7 +8,7 @@
 
 Turn animated WebPs into MP4s or GIFs, convert between video formats, extract audio, and ensure perfect compatibility for devices like PlayStation 3 — all without ever touching a command line.
 
-![Alchemist GUI]([https://via.placeholder.com/800x500.png?text=Alchemist+GUI+Screenshot](https://raw.githubusercontent.com/Zanzibar82/Alchemist/refs/heads/main/Alchemist.png))
+![Alchemist GUI](https://raw.githubusercontent.com/Zanzibar82/Alchemist/refs/heads/main/Alchemist.png)
 
 ## ✨ Features
 
