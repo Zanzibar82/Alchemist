@@ -6,7 +6,7 @@
 
 **Alchemist** is a powerful, user-friendly desktop application built to simplify media conversion. It transforms a complex process into a simple drag-and-drop experience, supporting a wide range of popular formats.
 
-Turn animated WebPs into MP4s or GIFs, convert between video formats, extract audio, and ensure perfect compatibility for devices like the PlayStation 3—all without ever touching a command line.
+Turn animated WebPs into MP4s or GIFs, convert between video formats, extract audio, and ensure perfect compatibility for devices like PlayStation 3 — all without ever touching a command line.
 
 ![Alchemist GUI Demo](https://via.placeholder.com/800x500.png?text=Alchemist+GUI+Screenshot) *// Replace with an actual screenshot of your app later*
 
