@@ -42,3 +42,10 @@ Turn animated WebPs into MP4s or GIFs, convert between video formats, extract au
 ### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
+
+
+## 📜 License ----------------
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+**Note:** This project distributes binaries of FFmpeg, which is licensed under the LGPLv2.1/GPLv2. The relevant license texts are provided in the `LICENSES` directory. The source code for FFmpeg is available from the [official FFmpeg website](https://ffmpeg.org/source.html).
