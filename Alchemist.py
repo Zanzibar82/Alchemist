@@ -6,6 +6,7 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext
 import subprocess
+import argparse
 import os
 import sys
 from PIL import Image, ImageTk
@@ -62,6 +63,7 @@ class VideoConverterApp:
 
         # Define conversion commands (GIF/MP4 use FFmpeg, WebP uses internal method)
         self.commands = [
+            ("WebM → MP4", self.convert_webm_to_mp4_command),
             ("WebP → MP4", self.convert_webp_to_mp4_command),
             ("WebP → GIF", self.convert_webp_to_gif_command),
             ("MP4 → GIF", self.convert_mp4_to_gif_command),
@@ -159,7 +161,8 @@ class VideoConverterApp:
                       ("WebP files", "*.webp"),
                       ("GIF files", "*.gif"),
                       ("MP4 files", "*.mp4"),
-                      ("MKV files", "*.mkv")]
+                      ("MKV files", "*.mkv"),
+                      ("WebM files", "*.webm")]
         )
         self.add_files(files)
 
@@ -216,6 +219,20 @@ class VideoConverterApp:
         """Stop the conversion process"""
         self.stopped = True
         self.log_message("Stopping conversion...")
+
+    def convert_webm_to_mp4_command(self):
+        """Handle WebM to MP4 conversion"""
+        if not self.validate_prerequisites():
+            return
+        if not self.has_ffmpeg():
+            return
+        
+        self.stopped = False
+        self.conversion_thread = threading.Thread(
+            target=self.process_webm_to_mp4_conversions,
+            daemon=True
+        )
+        self.conversion_thread.start()
 
     def webp_to_mp4(self, input_path, output_path):
         """Convert WebP to MP4 using PIL and OpenCV (from script 1)"""
@@ -580,6 +597,49 @@ class VideoConverterApp:
             daemon=True
         )
         self.conversion_thread.start()
+
+    def process_webm_to_mp4_conversions(self):
+        """Process all WebM files in the list for MP4 conversion"""
+        total_files = len(self.file_list)
+        successful = 0
+        
+        try:
+            for i, input_path in enumerate(self.file_list):
+                if self.stopped:
+                    break
+                
+                # Only process WebM files for this command
+                if not input_path.lower().endswith('.webm'):
+                    continue
+                
+                # Update progress
+                progress = (i / total_files) * 100
+                self.progress_var.set(progress)
+                self.status_label.config(text=f"Converting: {os.path.basename(input_path)}")
+                
+                # Create output path
+                base_name = os.path.splitext(os.path.basename(input_path))[0]
+                output_file = os.path.join(self.output_folder, base_name + ".mp4")
+                
+                # Check if output file exists
+                if os.path.exists(output_file):
+                    if not self.ask_overwrite(os.path.basename(output_file)):
+                        continue
+                
+                # Build FFmpeg command for WebM to MP4 conversion
+                command = f'"{FFMPEG_PATH}" -i "{input_path}" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k -movflags +faststart -pix_fmt yuv420p -y "{output_file}"'
+                
+                if self.run_ffmpeg_command(command, input_path):
+                    successful += 1
+                    self.log_message(f"Successfully converted {os.path.basename(input_path)} to MP4")
+                else:
+                    self.log_message(f"Failed to convert {os.path.basename(input_path)} to MP4")
+        
+        finally:
+            self.progress_var.set(100)
+            status = "Stopped" if self.stopped else "Completed"
+            self.status_label.config(text=f"{status}! Successfully converted {successful}/{total_files} files.")
+            self.log_message(f"WebM to MP4 conversion {status.lower()}. {successful}/{total_files} files converted.")
 
     def process_mkv_to_mp4_ps3_compatible(self):
         """Process MKV files with PS3 compatibility checks"""
