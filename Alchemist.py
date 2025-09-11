@@ -78,13 +78,22 @@ class VideoConverterApp:
             btn = tk.Button(self.left_frame, text=label, width=25, command=command)
             btn.pack(pady=3)
 
+        # Add spacer to push utility buttons down
+        spacer = tk.Frame(self.left_frame, height=50)  # Adjust height as needed
+        spacer.pack(fill=tk.X, pady=10)
+
+        # Create a dedicated frame for utility buttons
+        self.utility_frame = tk.Frame(self.left_frame)
+        self.utility_frame.pack(fill=tk.X, pady=5)
+
+
         # Add utility buttons
-        tk.Button(self.left_frame, text="Add Files", command=self.add_files_dialog).pack(pady=5, fill=tk.X)
+        tk.Button(self.left_frame, text="Select Output...", command=self.select_output_folder).pack(pady=5, fill=tk.X)
+        tk.Button(self.left_frame, text="Add Files...", command=self.add_files_dialog).pack(pady=5, fill=tk.X)
         tk.Button(self.left_frame, text="Remove Selected", command=self.remove_selected).pack(pady=2, fill=tk.X)
         tk.Button(self.left_frame, text="Clear List", command=self.clear_list).pack(pady=2, fill=tk.X)
-        tk.Button(self.left_frame, text="Select Output", command=self.select_output_folder).pack(pady=5, fill=tk.X)
-        
-        # Add this in your __init__ method after creating the buttons
+       
+        # Tagline
         tagline = tk.Label(self.left_frame, text="Manage and Transform Your Media", font=("Arial", 8), fg="gray")
         tagline.pack(pady=5)
 
