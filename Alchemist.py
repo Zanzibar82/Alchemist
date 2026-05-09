@@ -66,11 +66,13 @@ class VideoConverterApp:
             ("WebM → MP4", self.convert_webm_to_mp4_command),
             ("WebP → MP4", self.convert_webp_to_mp4_command),
             ("WebP → GIF", self.convert_webp_to_gif_command),
+            ("MP4 → WebM", self.convert_mp4_to_webm_command),
             ("MP4 → GIF", self.convert_mp4_to_gif_command),
             ("GIF → MP4", self.convert_gif_to_mp4_command),
             ("MKV → MP4 (PS3)", self.convert_mkv_to_mp4_command),
             ("Extract Audio", self.extract_audio_command),
             ("Any Audio → MP3 320k", self.convert_audio_to_mp3_command),
+            ("Any Video → XviD AVI", self.convert_to_old_device_command),
         ]
 
         # Create conversion buttons
@@ -228,7 +230,92 @@ class VideoConverterApp:
         """Stop the conversion process"""
         self.stopped = True
         self.log_message("Stopping conversion...")
+        
+    def convert_to_old_device_command(self):
+        """Convert any video to XviD AVI for old CRT/DVD player compatibility"""
+        if not self.validate_prerequisites():
+            return
+        if not self.has_ffmpeg():
+            return
 
+        video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.ts', '.m4v', '.mpg', '.mpeg'}
+
+        # Collect audio selections on the main thread BEFORE starting conversion
+        audio_selections = {}
+        for input_path in self.file_list:
+            file_ext = os.path.splitext(input_path)[1].lower()
+            if file_ext not in video_extensions:
+                continue
+            audio_selections[input_path] = self.ask_audio_track(input_path)
+
+        self.stopped = False
+        self.conversion_thread = threading.Thread(
+            target=self.process_to_old_device_conversions,
+            args=(audio_selections,),
+            daemon=True
+        )
+        self.conversion_thread.start()
+
+    def process_to_old_device_conversions(self, audio_selections):
+        """Process all video files for old device compatibility"""
+        self.pause_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.NORMAL)
+
+        total_files = len(self.file_list)
+        successful = 0
+        video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.ts', '.m4v', '.mpg', '.mpeg'}
+
+        try:
+            for i, input_path in enumerate(self.file_list):
+                if self.stopped:
+                    break
+
+                while self.paused:
+                    time.sleep(0.1)
+                    if self.stopped:
+                        break
+
+                file_ext = os.path.splitext(input_path)[1].lower()
+                if file_ext not in video_extensions:
+                    continue
+
+                progress = (i / total_files) * 100
+                self.progress_var.set(progress)
+                self.status_label.config(text=f"Converting: {os.path.basename(input_path)}")
+
+                base_name = os.path.splitext(os.path.basename(input_path))[0]
+                output_file = os.path.join(self.output_folder, base_name + "_vintage.avi")
+
+                if os.path.exists(output_file):
+                    if not self.ask_overwrite(os.path.basename(output_file)):
+                        continue
+
+                audio_index = audio_selections.get(input_path, 0)
+                self.log_message(f"Selected audio track index: {audio_index}")
+
+                command = (
+                    f'"{FFMPEG_PATH}" -i "{input_path}" '
+                    f'-map 0:v:0 -map 0:a:{audio_index} -sn '
+                    f'-vf "scale=720:-2,fps=25,setsar=1" '
+                    f'-c:v libxvid -vtag XVID -b:v 900k -bf 2 -trellis 1 -threads 0 '
+                    f'-c:a libmp3lame -b:a 128k -ar 48000 -ac 2 '
+                    f'-y "{output_file}"'
+                )
+
+                if self.run_ffmpeg_command(command, input_path):
+                    successful += 1
+                    self.log_message(f"Successfully converted {os.path.basename(input_path)}")
+                else:
+                    self.log_message(f"Failed to convert {os.path.basename(input_path)}")
+
+        finally:
+            self.pause_btn.config(state=tk.DISABLED)
+            self.stop_btn.config(state=tk.DISABLED)
+            self.progress_var.set(100)
+            status = "Stopped" if self.stopped else "Completed"
+            self.status_label.config(text=f"{status}! Successfully converted {successful}/{total_files} files.")
+            self.log_message(f"Old Device conversion {status.lower()}. {successful}/{total_files} files converted.")
+            
     def convert_webm_to_mp4_command(self):
         """Handle WebM to MP4 conversion"""
         if not self.validate_prerequisites():
@@ -593,8 +680,8 @@ class VideoConverterApp:
             ".mp4"
         )
 
-    def convert_mkv_to_mp4_command(self):
-        """Convert MKV to MP4 with smart PS3 compatibility checking"""
+    def convert_mp4_to_webm_command(self):
+        """Convert MP4 to WebM using FFmpeg"""
         if not self.validate_prerequisites():
             return
         if not self.has_ffmpeg():
@@ -602,7 +689,80 @@ class VideoConverterApp:
         
         self.stopped = False
         self.conversion_thread = threading.Thread(
+            target=self.process_mp4_to_webm_conversions,
+            daemon=True
+        )
+        self.conversion_thread.start()
+        
+    def process_mp4_to_webm_conversions(self):
+        """Process all MP4 files in the list for WebM conversion"""
+        total_files = len(self.file_list)
+        successful = 0
+        
+        try:
+            for i, input_path in enumerate(self.file_list):
+                if self.stopped:
+                    break
+                
+                # Only process MP4 files
+                if not input_path.lower().endswith('.mp4'):
+                    continue
+                
+                # Update progress
+                progress = (i / total_files) * 100
+                self.progress_var.set(progress)
+                self.status_label.config(text=f"Converting: {os.path.basename(input_path)}")
+                
+                # Create output path
+                base_name = os.path.splitext(os.path.basename(input_path))[0]
+                output_file = os.path.join(self.output_folder, base_name + ".webm")
+                
+                # Check if output file exists
+                if os.path.exists(output_file):
+                    if not self.ask_overwrite(os.path.basename(output_file)):
+                        continue
+                
+                # Build FFmpeg command for MP4 to WebM conversion
+                # VP9 codec gives better quality but is slower
+                # VP8 is faster but lower quality
+                command = f'"{FFMPEG_PATH}" -i "{input_path}" -c:v libvpx-vp9 -crf 30 -b:v 0 -c:a libopus -b:a 128k -y "{output_file}"'
+                
+                # Alternative using VP8 (faster, lower quality):
+                # command = f'"{FFMPEG_PATH}" -i "{input_path}" -c:v libvpx -crf 10 -b:v 1M -c:a libvorbis -y "{output_file}"'
+                
+                if self.run_ffmpeg_command(command, input_path):
+                    successful += 1
+                    self.log_message(f"Successfully converted {os.path.basename(input_path)} to WebM")
+                else:
+                    self.log_message(f"Failed to convert {os.path.basename(input_path)} to WebM")
+        
+        finally:
+            self.progress_var.set(100)
+            status = "Stopped" if self.stopped else "Completed"
+            self.status_label.config(text=f"{status}! Successfully converted {successful}/{total_files} files.")
+            self.log_message(f"MP4 to WebM conversion {status.lower()}. {successful}/{total_files} files converted.")        
+
+    def convert_mkv_to_mp4_command(self):
+        """Convert any video to MP4 with PS3 compatibility"""
+        if not self.validate_prerequisites():
+            return
+        if not self.has_ffmpeg():
+            return
+
+        video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.ts', '.m4v', '.mpg', '.mpeg'}
+
+        # Collect audio selections on main thread before starting conversion
+        audio_selections = {}
+        for input_path in self.file_list:
+            file_ext = os.path.splitext(input_path)[1].lower()
+            if file_ext not in video_extensions:
+                continue
+            audio_selections[input_path] = self.ask_audio_track(input_path)
+
+        self.stopped = False
+        self.conversion_thread = threading.Thread(
             target=self.process_mkv_to_mp4_ps3_compatible,
+            args=(audio_selections,),
             daemon=True
         )
         self.conversion_thread.start()
@@ -650,104 +810,121 @@ class VideoConverterApp:
             self.status_label.config(text=f"{status}! Successfully converted {successful}/{total_files} files.")
             self.log_message(f"WebM to MP4 conversion {status.lower()}. {successful}/{total_files} files converted.")
 
-    def process_mkv_to_mp4_ps3_compatible(self):
-        """Process MKV files with PS3 compatibility checks"""
+    def process_mkv_to_mp4_ps3_compatible(self, audio_selections):
+        """Process video files for PS3 compatibility"""
+        self.pause_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.NORMAL)
+
         total_files = len(self.file_list)
         successful = 0
-        
+        video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.ts', '.m4v', '.mpg', '.mpeg'}
+
         try:
             for i, input_path in enumerate(self.file_list):
                 if self.stopped:
                     break
-                
-                # Only process MKV files
-                if not input_path.lower().endswith('.mkv'):
+
+                while self.paused:
+                    time.sleep(0.1)
+                    if self.stopped:
+                        break
+
+                file_ext = os.path.splitext(input_path)[1].lower()
+                if file_ext not in video_extensions:
                     continue
-                
-                # Update progress
+
                 progress = (i / total_files) * 100
                 self.progress_var.set(progress)
                 self.status_label.config(text=f"Analyzing: {os.path.basename(input_path)}")
-                
-                # Create output path
+
                 base_name = os.path.splitext(os.path.basename(input_path))[0]
-                output_file = os.path.join(self.output_folder, base_name + ".mp4")
-                
-                # Check if output file exists
+                output_file = os.path.join(self.output_folder, base_name + "_ps3.mp4")
+
                 if os.path.exists(output_file):
                     if not self.ask_overwrite(os.path.basename(output_file)):
                         continue
-                
-                # Analyze the source file to determine the best approach
-                needs_reencoding = self.needs_ps3_reencoding(input_path)
-                
-                if needs_reencoding:
-                    # Source is not PS3 compatible, need to re-encode
-                    self.status_label.config(text=f"Converting (re-encoding): {os.path.basename(input_path)}")
-                    command = f'"{FFMPEG_PATH}" -i "{input_path}" -c:v libx264 -preset medium -crf 23 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 192k -y "{output_file}"'
+
+                audio_index = audio_selections.get(input_path, 0)
+                self.log_message(f"Selected audio track index: {audio_index}")
+
+                # Analyze video stream
+                needs_video_reencode, reason = self.needs_ps3_video_reencode(input_path)
+                self.log_message(f"Video re-encode needed: {needs_video_reencode} ({reason})")
+
+                if needs_video_reencode:
+                    video_args = (
+                        f'-c:v libx264 -preset medium -crf 23 '
+                        f'-profile:v high -level:v 4.1 '
+                        f'-pix_fmt yuv420p -movflags +faststart'
+                    )
                 else:
-                    # Source is already PS3 compatible, just remux
-                    self.status_label.config(text=f"Converting (copying): {os.path.basename(input_path)}")
-                    command = f'"{FFMPEG_PATH}" -i "{input_path}" -c copy -movflags +faststart -y "{output_file}"'
-                
+                    video_args = '-c:v copy'
+
+                # Audio always re-encoded to AAC for PS3 safety
+                audio_args = f'-c:a aac -b:a 192k -ar 48000 -ac 2'
+
+                command = (
+                    f'"{FFMPEG_PATH}" -i "{input_path}" '
+                    f'-map 0:v:0 -map 0:a:{audio_index} -sn '
+                    f'{video_args} {audio_args} '
+                    f'-y "{output_file}"'
+                )
+
+                self.status_label.config(text=f"Converting: {os.path.basename(input_path)}")
                 if self.run_ffmpeg_command(command, input_path):
                     successful += 1
-                    mode = "re-encoded" if needs_reencoding else "copied"
-                    self.log_message(f"Successfully {mode} {os.path.basename(input_path)} for PS3 compatibility")
+                    mode = "re-encoded" if needs_video_reencode else "remuxed"
+                    self.log_message(f"Successfully {mode} {os.path.basename(input_path)} for PS3")
                 else:
                     self.log_message(f"Failed to convert {os.path.basename(input_path)}")
-        
+
         finally:
+            self.pause_btn.config(state=tk.DISABLED)
+            self.stop_btn.config(state=tk.DISABLED)
             self.progress_var.set(100)
             status = "Stopped" if self.stopped else "Completed"
             self.status_label.config(text=f"{status}! Successfully converted {successful}/{total_files} files.")
-            self.log_message(f"MKV to MP4 (PS3) conversion {status.lower()}. {successful}/{total_files} files converted.")
+            self.log_message(f"PS3 conversion {status.lower()}. {successful}/{total_files} files converted.")
 
-    def needs_ps3_reencoding(self, input_path):
-        """Check if a video file needs re-encoding for PS3 compatibility"""
+    def needs_ps3_video_reencode(self, input_path):
+        """Check if video stream needs re-encoding for PS3. Returns (bool, reason)."""
         try:
-            # Check video codec
-            video_check = [
-                FFPROBE_PATH, '-v', 'error', '-select_streams', 'v:0',
-                '-show_entries', 'stream=codec_name,pix_fmt', '-of', 'default=noprint_wrappers=1:nokey=1',
-                input_path
-            ]
-            
-            result = subprocess.run(video_check, stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
-                                  text=True, check=True, timeout=30)
-            
-            lines = result.stdout.strip().split('\n')
-            codec_name = lines[0] if len(lines) > 0 else ''
-            pix_fmt = lines[1] if len(lines) > 1 else ''
-            
-            # PS3 requires H.264 video with yuv420p pixel format
-            if codec_name != 'h264' or pix_fmt != 'yuv420p':
-                self.log_message(f"Source needs re-encoding: codec={codec_name}, pixel_format={pix_fmt}")
-                return True
-            
-            # Check audio codec (PS3 works best with AAC audio)
-            audio_check = [
-                FFPROBE_PATH, '-v', 'error', '-select_streams', 'a:0',
-                '-show_entries', 'stream=codec_name', '-of', 'default=noprint_wrappers=1:nokey=1',
-                input_path
-            ]
-            
-            result = subprocess.run(audio_check, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                  text=True, check=True, timeout=30)
-            
-            audio_codec = result.stdout.strip()
-            
-            # If audio is not AAC, we should re-encode
-            if audio_codec not in ['aac', 'mp3']:
-                self.log_message(f"Audio needs re-encoding: {audio_codec}")
-                return True
-            
-            return False
-            
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            self.log_message(f"Error analyzing {os.path.basename(input_path)}: {e}")
-            # If we can't analyze, assume re-encoding is needed for safety
-            return True
+            result = subprocess.run(
+                [FFPROBE_PATH, '-v', 'error', '-select_streams', 'v:0',
+                 '-show_entries', 'stream=codec_name,pix_fmt,profile,level,width,height',
+                 '-of', 'json', input_path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30
+            )
+
+            import json
+            data = json.loads(result.stdout)
+            streams = data.get('streams', [])
+            if not streams:
+                return True, "no video stream found"
+
+            s = streams[0]
+            codec = s.get('codec_name', '')
+            pix_fmt = s.get('pix_fmt', '')
+            profile = s.get('profile', '').lower()
+            level = int(s.get('level', 999))
+            width = int(s.get('width', 0))
+            height = int(s.get('height', 0))
+
+            if codec != 'h264':
+                return True, f"codec is {codec}, not h264"
+            if pix_fmt != 'yuv420p':
+                return True, f"pixel format is {pix_fmt}"
+            if 'high' not in profile and 'main' not in profile and 'baseline' not in profile:
+                return True, f"unsupported profile: {profile}"
+            if level > 41:
+                return True, f"level {level} exceeds PS3 max (41)"
+            if width > 1920 or height > 1080:
+                return True, f"resolution {width}x{height} exceeds 1080p"
+
+            return False, "already PS3 compatible"
+
+        except Exception as e:
+            return True, f"analysis error: {e}"
 
     def extract_audio_command(self):
         """Extract audio from video files"""
@@ -842,6 +1019,77 @@ class VideoConverterApp:
             f"The file '{filename}' already exists. Do you want to overwrite it?"
         )
         return result
+
+    def ask_audio_track(self, input_path):
+        """Show a dialog to select audio track. Returns track index or 0 if only one/cancelled."""
+        try:
+            result = subprocess.run(
+                [FFPROBE_PATH, '-v', 'error', '-select_streams', 'a',
+                 '-show_entries', 'stream=index,codec_name,channels,bit_rate:stream_tags=language,title',
+                 '-of', 'json', input_path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30
+            )
+
+            import json
+            data = json.loads(result.stdout)
+            streams = data.get('streams', [])
+
+            # Only one or no tracks — return default
+            if len(streams) <= 1:
+                return 0
+
+            # Build label for each track
+            track_labels = []
+            for i, s in enumerate(streams):
+                tags = s.get('tags', {})
+                lang = tags.get('language', 'unknown')
+                title = tags.get('title', '')
+                codec = s.get('codec_name', '?')
+                channels = s.get('channels', '?')
+                bitrate = s.get('bit_rate', '')
+                bitrate_str = f", {int(bitrate)//1000}k" if str(bitrate).isdigit() else ''
+                label = f"Track {i+1}: [{lang}] {codec} {channels}ch{bitrate_str}"
+                if title:
+                    label += f" — {title}"
+                track_labels.append(label)
+
+            # Show dialog on main thread (we're already on main thread here)
+            selected_index = [0]
+
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Select Audio Track")
+            dialog.geometry("500x300")
+            dialog.grab_set()
+            dialog.resizable(False, False)
+            dialog.focus_force()
+
+            tk.Label(dialog, text=f"Multiple audio tracks found in:\n{os.path.basename(input_path)}",
+                     wraplength=460, justify='left').pack(pady=(15, 5), padx=15)
+
+            listbox = tk.Listbox(dialog, selectmode='single', height=len(track_labels))
+            for label in track_labels:
+                listbox.insert(tk.END, label)
+            listbox.select_set(0)
+            listbox.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
+
+            def confirm():
+                sel = listbox.curselection()
+                selected_index[0] = sel[0] if sel else 0
+                dialog.destroy()
+
+            def on_close():
+                selected_index[0] = 0
+                dialog.destroy()
+
+            dialog.protocol("WM_DELETE_WINDOW", on_close)
+            tk.Button(dialog, text="Use Selected Track", command=confirm, width=20).pack(pady=10)
+
+            dialog.wait_window()  # Blocks until dialog is closed, safe on main thread
+            return selected_index[0]
+
+        except Exception as e:
+            self.log_message(f"Error reading audio tracks: {e}")
+            return 0
 
 if __name__ == "__main__":
     # Create root window with drag-and-drop support if available
