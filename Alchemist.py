@@ -282,6 +282,7 @@ class VideoConverterApp:
                 progress = (i / total_files) * 100
                 self.progress_var.set(progress)
                 self.status_label.config(text=f"Converting: {os.path.basename(input_path)}")
+                self.root.update_idletasks()  # Force UI update
 
                 base_name = os.path.splitext(os.path.basename(input_path))[0]
                 output_file = os.path.join(self.output_folder, base_name + "_vintage.avi")
@@ -299,18 +300,18 @@ class VideoConverterApp:
                 if audio_delay_ms != 0:
                     delay_seconds = audio_delay_ms / 1000.0
                     self.log_message(f"Applying audio delay of {delay_seconds:.3f} seconds using adelay")
-                    # Use adelay filter (in milliseconds) and then trim to remove silence at end
+                    # Fixed command with -shortest in correct position
                     command = (
                         f'"{FFMPEG_PATH}" -i "{input_path}" '
                         f'-map 0:v:0 -map 0:a:{audio_index} -sn '
                         f'-vf "scale=720:-2,fps=25,setsar=1" '
                         f'-c:v libxvid -vtag XVID -b:v 900k -bf 2 -trellis 1 -threads 0 '
-                        f'-af "adelay={audio_delay_ms}|{audio_delay_ms},apad=whole_len=0" '
+                        f'-af "adelay={audio_delay_ms}|{audio_delay_ms}" '
                         f'-c:a libmp3lame -b:a 128k -ar 48000 -ac 2 '
+                        f'-shortest '
                         f'-y "{output_file}"'
                     )
                 else:
-                    # No delay detected - use normal conversion
                     command = (
                         f'"{FFMPEG_PATH}" -i "{input_path}" '
                         f'-map 0:v:0 -map 0:a:{audio_index} -sn '
@@ -543,14 +544,40 @@ class VideoConverterApp:
             self.log_message(f"GIF Conversion {status.lower()}. {successful}/{total_files} files converted.")
 
     def run_ffmpeg_command(self, command, input_path):
-        """Run FFmpeg command with error handling"""
+        """Run FFmpeg command with error handling and progress output"""
         try:
             self.log_message(f"Executing: {command}")
-            result = subprocess.run(command, shell=True, check=True, 
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            return True
-        except subprocess.CalledProcessError as e:
-            self.log_message(f"FFmpeg error for {os.path.basename(input_path)}: {e.stderr}")
+            # Use Popen to capture stderr in real-time
+            process = subprocess.Popen(
+                command, 
+                shell=True, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE, 
+                text=True
+            )
+            
+            # Read stderr for progress info
+            for line in process.stderr:
+                if 'time=' in line:
+                    # Extract time info for progress feedback
+                    import re
+                    time_match = re.search(r'time=(\d+:\d+:\d+\.\d+)', line)
+                    if time_match:
+                        self.log_message(f"Progress: {time_match.group(1)}")
+                # Also check for errors
+                if 'error' in line.lower():
+                    self.log_message(f"FFmpeg: {line.strip()}")
+            
+            process.wait()
+            
+            if process.returncode == 0:
+                return True
+            else:
+                self.log_message(f"FFmpeg error for {os.path.basename(input_path)}: return code {process.returncode}")
+                return False
+                
+        except Exception as e:
+            self.log_message(f"FFmpeg error for {os.path.basename(input_path)}: {str(e)}")
             return False
 
     def convert_audio_to_mp3_command(self):
