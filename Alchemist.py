@@ -600,7 +600,7 @@ class VideoConverterApp:
         successful = 0
         
         # Common audio file extensions
-        audio_extensions = {'.mp3', '.wav', '.flac', '.aac', '.m4a', '.ogg', '.wma', '.aiff', '.alac'}
+        audio_extensions = {'.mp3', '.wav', '.flac', '.aac', '.m4a', '.ogg', '.wma', '.aiff', '.alac', '.ac3'}
         
         try:
             for i, input_path in enumerate(self.file_list):
@@ -972,27 +972,97 @@ class VideoConverterApp:
             return True, f"analysis error: {e}"
 
     def extract_audio_command(self):
-        """Extract audio from video files"""
-        self.run_ffmpeg_conversion(
-            'ffmpeg -i "{input}" -vn -acodec copy "{output}"',
-            "",  # Any video file
-            ".m4a"
-        )
-
-    def run_ffmpeg_conversion(self, command_template, input_ext, output_ext):
-        """Generic method to run FFmpeg conversions"""
+        """Extract audio from video files with track selection"""
         if not self.validate_prerequisites():
             return
         if not self.has_ffmpeg():
             return
-        
+
+        video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.ts', '.m4v', '.mpg', '.mpeg'}
+
+        # Collect audio selections on main thread before starting
+        audio_selections = {}
+        for input_path in self.file_list:
+            file_ext = os.path.splitext(input_path)[1].lower()
+            if file_ext not in video_extensions:
+                continue
+            audio_selections[input_path] = self.ask_audio_track(input_path)
+
         self.stopped = False
         self.conversion_thread = threading.Thread(
-            target=self.process_ffmpeg_conversions, 
-            args=(command_template, input_ext, output_ext),
+            target=self.process_extract_audio,
+            args=(audio_selections,),
             daemon=True
         )
         self.conversion_thread.start()
+        
+    def process_extract_audio(self, audio_selections):
+        """Extract selected audio track from video files"""
+        self.pause_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.NORMAL)
+
+        total_files = len(self.file_list)
+        successful = 0
+        video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.ts', '.m4v', '.mpg', '.mpeg'}
+
+        try:
+            for i, input_path in enumerate(self.file_list):
+                if self.stopped:
+                    break
+
+                while self.paused:
+                    time.sleep(0.1)
+                    if self.stopped:
+                        break
+
+                file_ext = os.path.splitext(input_path)[1].lower()
+                self.log_message(f"Processing: {os.path.basename(input_path)} (ext: {file_ext})")
+                
+                if file_ext not in video_extensions:
+                    self.log_message(f"Skipping: extension {file_ext} not in video_extensions list")
+                    continue
+
+                progress = (i / total_files) * 100
+                self.progress_var.set(progress)
+                self.status_label.config(text=f"Extracting: {os.path.basename(input_path)}")
+
+                base_name = os.path.splitext(os.path.basename(input_path))[0]
+                
+                audio_index = audio_selections.get(input_path, 0)
+                self.log_message(f"Audio index selected: {audio_index}")
+                
+                ext = self.get_audio_extension(input_path, audio_index)
+                self.log_message(f"Detected audio extension: {ext}")
+                
+                output_file = os.path.join(self.output_folder, base_name + ext)
+                self.log_message(f"Output file will be: {output_file}")
+
+                if os.path.exists(output_file):
+                    if not self.ask_overwrite(os.path.basename(output_file)):
+                        self.log_message(f"Skipped (user declined overwrite): {output_file}")
+                        continue
+
+                command = (
+                    f'"{FFMPEG_PATH}" -i "{input_path}" '
+                    f'-map 0:a:{audio_index} '
+                    f'-vn -acodec copy '
+                    f'-y "{output_file}"'
+                )
+                self.log_message(f"Running command: {command}")
+
+                if self.run_ffmpeg_command(command, input_path):
+                    successful += 1
+                    self.log_message(f"Successfully extracted audio from {os.path.basename(input_path)}")
+                else:
+                    self.log_message(f"FAILED to extract audio from {os.path.basename(input_path)}")
+
+        finally:
+            self.pause_btn.config(state=tk.DISABLED)
+            self.stop_btn.config(state=tk.DISABLED)
+            self.progress_var.set(100)
+            status = "Stopped" if self.stopped else "Completed"
+            self.status_label.config(text=f"{status}! Successfully extracted {successful}/{total_files} files.")
+            self.log_message(f"Audio extraction {status.lower()}. {successful}/{total_files} files extracted.")
 
     def process_ffmpeg_conversions(self, command_template, input_ext, output_ext):
         """Process files using FFmpeg"""
@@ -1135,6 +1205,44 @@ class VideoConverterApp:
         except Exception as e:
             self.log_message(f"Error reading audio tracks: {e}")
             return 0
+
+    def get_audio_extension(self, input_path, audio_index):
+        """Return the appropriate file extension for the selected audio track."""
+        try:
+            import json
+            result = subprocess.run(
+                [FFPROBE_PATH, '-v', 'error', '-select_streams', f'a:{audio_index}',
+                 '-show_entries', 'stream=codec_name',
+                 '-of', 'json', input_path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30
+            )
+            data = json.loads(result.stdout)
+            streams = data.get('streams', [])
+            if not streams:
+                return '.m4a'
+            
+            codec = streams[0].get('codec_name', '').lower()
+            
+            extension_map = {
+                'aac':    '.aac',
+                'mp3':    '.mp3',
+                'ac3':    '.ac3',
+                'eac3':   '.eac3',
+                'dts':    '.dts',
+                'flac':   '.flac',
+                'opus':   '.opus',
+                'vorbis': '.ogg',
+                'pcm_s16le': '.wav',
+                'pcm_s24le': '.wav',
+                'pcm_f32le': '.wav',
+                'truehd': '.thd',
+            }
+            
+            return extension_map.get(codec, '.mka')  # fallback to .mka (Matroska audio) for unknown codecs
+        
+        except Exception as e:
+            self.log_message(f"Warning: could not detect audio codec, defaulting to .m4a: {e}")
+            return '.m4a'            
 
     def get_audio_delay(self, input_path, audio_index):
         """
