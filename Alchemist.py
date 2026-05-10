@@ -293,14 +293,32 @@ class VideoConverterApp:
                 audio_index = audio_selections.get(input_path, 0)
                 self.log_message(f"Selected audio track index: {audio_index}")
 
-                command = (
-                    f'"{FFMPEG_PATH}" -i "{input_path}" '
-                    f'-map 0:v:0 -map 0:a:{audio_index} -sn '
-                    f'-vf "scale=720:-2,fps=25,setsar=1" '
-                    f'-c:v libxvid -vtag XVID -b:v 900k -bf 2 -trellis 1 -threads 0 '
-                    f'-c:a libmp3lame -b:a 128k -ar 48000 -ac 2 '
-                    f'-y "{output_file}"'
-                )
+                # Get audio delay for the selected track
+                audio_delay_ms = self.get_audio_delay(input_path, audio_index)
+                
+                if audio_delay_ms != 0:
+                    delay_seconds = audio_delay_ms / 1000.0
+                    self.log_message(f"Applying audio delay of {delay_seconds:.3f} seconds using adelay")
+                    # Use adelay filter (in milliseconds) and then trim to remove silence at end
+                    command = (
+                        f'"{FFMPEG_PATH}" -i "{input_path}" '
+                        f'-map 0:v:0 -map 0:a:{audio_index} -sn '
+                        f'-vf "scale=720:-2,fps=25,setsar=1" '
+                        f'-c:v libxvid -vtag XVID -b:v 900k -bf 2 -trellis 1 -threads 0 '
+                        f'-af "adelay={audio_delay_ms}|{audio_delay_ms},apad=whole_len=0" '
+                        f'-c:a libmp3lame -b:a 128k -ar 48000 -ac 2 '
+                        f'-y "{output_file}"'
+                    )
+                else:
+                    # No delay detected - use normal conversion
+                    command = (
+                        f'"{FFMPEG_PATH}" -i "{input_path}" '
+                        f'-map 0:v:0 -map 0:a:{audio_index} -sn '
+                        f'-vf "scale=720:-2,fps=25,setsar=1" '
+                        f'-c:v libxvid -vtag XVID -b:v 900k -bf 2 -trellis 1 -threads 0 '
+                        f'-c:a libmp3lame -b:a 128k -ar 48000 -ac 2 '
+                        f'-y "{output_file}"'
+                    )
 
                 if self.run_ffmpeg_command(command, input_path):
                     successful += 1
@@ -315,7 +333,7 @@ class VideoConverterApp:
             status = "Stopped" if self.stopped else "Completed"
             self.status_label.config(text=f"{status}! Successfully converted {successful}/{total_files} files.")
             self.log_message(f"Old Device conversion {status.lower()}. {successful}/{total_files} files converted.")
-            
+
     def convert_webm_to_mp4_command(self):
         """Handle WebM to MP4 conversion"""
         if not self.validate_prerequisites():
@@ -1091,6 +1109,61 @@ class VideoConverterApp:
             self.log_message(f"Error reading audio tracks: {e}")
             return 0
 
+    def get_audio_delay(self, input_path, audio_index):
+        """
+        Extract audio delay by analyzing edit lists and packet timestamps.
+        This works for MKV files with container-level audio delays.
+        """
+        try:
+            # Get first few audio packets to find the actual PTS (presentation timestamp)
+            result = subprocess.run(
+                [FFPROBE_PATH, '-v', 'error', '-select_streams', f'a:{audio_index}',
+                 '-show_entries', 'packet=pts,pts_time',
+                 '-read_intervals', '%+#10',  # Read first 10 packets
+                 '-of', 'json', input_path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30
+            )
+            
+            import json
+            data = json.loads(result.stdout)
+            packets = data.get('packets', [])
+            
+            if packets:
+                # Get the first packet's PTS (presentation timestamp)
+                first_pts = float(packets[0].get('pts_time', 0))
+                if first_pts > 0.1:  # Significant delay
+                    delay_ms = int(first_pts * 1000)
+                    self.log_message(f"Detected audio delay from packets: {delay_ms/1000:.3f}s")
+                    return delay_ms
+            
+            # Fallback: Compare video and audio first packet timestamps
+            video_packets = subprocess.run(
+                [FFPROBE_PATH, '-v', 'error', '-select_streams', 'v:0',
+                 '-show_entries', 'packet=pts_time',
+                 '-read_intervals', '%+#1',
+                 '-of', 'json', input_path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30
+            )
+            
+            video_data = json.loads(video_packets.stdout)
+            video_pkts = video_data.get('packets', [])
+            video_pts = float(video_pkts[0].get('pts_time', 0)) if video_pkts else 0
+            
+            audio_pkts = packets
+            audio_pts = float(audio_pkts[0].get('pts_time', 0)) if audio_pkts else 0
+            
+            delay_ms = int((audio_pts - video_pts) * 1000)
+            
+            if abs(delay_ms) > 10:
+                self.log_message(f"Detected audio delay from packet comparison: {delay_ms/1000:.3f}s")
+                return delay_ms
+                
+            return 0
+            
+        except Exception as e:
+            self.log_message(f"Warning: Could not extract audio delay: {e}")
+            return 0
+            
 if __name__ == "__main__":
     # Create root window with drag-and-drop support if available
     if HAS_DND:
