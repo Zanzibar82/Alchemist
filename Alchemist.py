@@ -296,28 +296,32 @@ class VideoConverterApp:
 
                 # Get audio delay for the selected track
                 audio_delay_ms = self.get_audio_delay(input_path, audio_index)
-                
-                if audio_delay_ms != 0:
+
+                # Only apply adelay for POSITIVE delays (audio starts after video)
+                # Negative delays mean audio starts earlier - ignore them for vintage conversion
+                if audio_delay_ms > 0:
                     delay_seconds = audio_delay_ms / 1000.0
                     self.log_message(f"Applying audio delay of {delay_seconds:.3f} seconds using adelay")
-                    # Fixed command with -shortest in correct position
                     command = (
                         f'"{FFMPEG_PATH}" -i "{input_path}" '
                         f'-map 0:v:0 -map 0:a:{audio_index} -sn '
                         f'-vf "scale=720:-2,fps=25,setsar=1" '
-                        f'-c:v libxvid -vtag XVID -b:v 900k -bf 2 -trellis 1 -threads 0 '
+                        f'-c:v libxvid -vtag XVID -b:v 1500k -maxrate 1800k -bufsize 2000k -bf 2 -trellis 1 -threads 0 '
                         f'-af "adelay={audio_delay_ms}|{audio_delay_ms}" '
-                        f'-c:a libmp3lame -b:a 128k -ar 48000 -ac 2 '
+                        f'-c:a libmp3lame -b:a 192k -ar 48000 -ac 2 '
                         f'-shortest '
                         f'-y "{output_file}"'
                     )
                 else:
+                    # Negative or zero delay - use normal conversion (no adelay)
+                    if audio_delay_ms < 0:
+                        self.log_message(f"Ignoring negative audio delay of {audio_delay_ms/1000:.3f}s (audio starts before video)")
                     command = (
                         f'"{FFMPEG_PATH}" -i "{input_path}" '
                         f'-map 0:v:0 -map 0:a:{audio_index} -sn '
                         f'-vf "scale=720:-2,fps=25,setsar=1" '
-                        f'-c:v libxvid -vtag XVID -b:v 900k -bf 2 -trellis 1 -threads 0 '
-                        f'-c:a libmp3lame -b:a 128k -ar 48000 -ac 2 '
+                        f'-c:v libxvid -vtag XVID -b:v 1500k -maxrate 1800k -bufsize 2000k -bf 2 -trellis 1 -threads 0 '
+                        f'-c:a libmp3lame -b:a 192k -ar 48000 -ac 2 '
                         f'-y "{output_file}"'
                     )
 
