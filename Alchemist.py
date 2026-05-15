@@ -1,8 +1,8 @@
 import re
 import time
-from tkinter import ttk
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 import threading
-from tkinterdnd2 import DND_FILES, TkinterDnD
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext
 import subprocess
@@ -54,7 +54,7 @@ class VideoConverterApp:
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Left frame for buttons
-        self.left_frame = tk.Frame(self.main_frame)
+        self.left_frame = tk.Frame(self.main_frame, bg="#AE90EE")
         self.left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5)
 
         # Right frame for file list and log
@@ -71,33 +71,60 @@ class VideoConverterApp:
             ("GIF → MP4", self.convert_gif_to_mp4_command),
             ("MKV → MP4 (PS3)", self.convert_mkv_to_mp4_command),
             ("Extract Audio", self.extract_audio_command),
-            ("Any Audio → MP3 320k", self.convert_audio_to_mp3_command),
-            ("Any Video → XviD AVI", self.convert_to_old_device_command),
+            ("Audio → MP3 320k", self.convert_audio_to_mp3_command),
+            ("Video → XviD AVI", self.convert_to_old_device_command),
         ]
 
         # Create conversion buttons
-        for label, command in self.commands:
-            btn = tk.Button(self.left_frame, text=label, width=25, command=command)
-            btn.pack(pady=3)
+        #for label, command in self.commands:
+        #    btn = tk.Button(self.left_frame, text=label, width=25, command=command)
+        #    btn.pack(pady=3)
+        
+        # Create conversion buttons in a 2-column grid
+        for i, (label, command) in enumerate(self.commands):
+            btn = tk.Button(self.left_frame, text=label, width=14, command=command)
+            btn.grid(row=i // 2, column=i % 2, padx=2, pady=2, sticky="ew")
 
-        # Add spacer to push utility buttons down
-        spacer = tk.Frame(self.left_frame, height=50)  # Adjust height as needed
-        spacer.pack(fill=tk.X, pady=10)
-
-        # Create a dedicated frame for utility buttons
-        self.utility_frame = tk.Frame(self.left_frame)
-        self.utility_frame.pack(fill=tk.X, pady=5)
-
+        # Allow both columns to expand equally
+        self.left_frame.grid_columnconfigure(0, weight=1)
+        self.left_frame.grid_columnconfigure(1, weight=1)
 
         # Add utility buttons
-        tk.Button(self.left_frame, text="Select Output...", command=self.select_output_folder).pack(pady=5, fill=tk.X)
-        tk.Button(self.left_frame, text="Add Files...", command=self.add_files_dialog).pack(pady=5, fill=tk.X)
-        tk.Button(self.left_frame, text="Remove Selected", command=self.remove_selected).pack(pady=2, fill=tk.X)
-        tk.Button(self.left_frame, text="Clear List", command=self.clear_list).pack(pady=2, fill=tk.X)
-       
-        # Tagline
-        tagline = tk.Label(self.left_frame, text="Manage and Transform Your Media", font=("Arial", 8), fg="gray")
-        tagline.pack(pady=5)
+        next_row = (len(self.commands) + 1) // 2
+        select_btn = ttk.Button(self.left_frame, text="Select Output...", 
+                                command=self.select_output_folder, bootstyle="success-solid")
+        select_btn.grid(row=next_row, column=0, columnspan=2, pady=5, padx=2, sticky="ew")
+        tk.Button(self.left_frame, text="Add Files...", command=self.add_files_dialog).grid(row=next_row+1, column=0, columnspan=2, pady=2, padx=2, sticky="ew")
+        tk.Button(self.left_frame, text="Remove Selected", command=self.remove_selected).grid(row=next_row+2, column=0, columnspan=2, pady=2, padx=2, sticky="ew")
+        tk.Button(self.left_frame, text="Clear List", command=self.clear_list).grid(row=next_row+3, column=0, columnspan=2, pady=2, padx=2, sticky="ew")
+
+        # Add Quality Preset Selector for XviD conversion
+        preset_frame = tk.Frame(self.left_frame)
+        preset_frame.grid(row=next_row+4, column=0, columnspan=2, pady=5, padx=2, sticky="ew")
+
+        tk.Label(preset_frame, text="XviD Quality:", font=("Arial", 9, "bold")).pack(anchor="w")
+
+        self.quality_var = tk.StringVar(value="optimal")
+
+        low_radio = tk.Radiobutton(preset_frame, text="Low - 1500k (For old 1.1 USB drives)", 
+                                   variable=self.quality_var, value="low")
+        low_radio.pack(anchor="w")
+
+        optimal_radio = tk.Radiobutton(preset_frame, text="Optimal - 2000k (Balanced)", 
+                                       variable=self.quality_var, value="optimal")
+        optimal_radio.pack(anchor="w")
+
+        high_radio = tk.Radiobutton(preset_frame, text="High - 3000k (Best quality for DVD)", 
+                                   variable=self.quality_var, value="high")
+        high_radio.pack(anchor="w")
+
+        info_label = tk.Label(preset_frame, text="⚠️ High preset may stutter on USB\n   Use Low if your DVD player has USB input", 
+                              font=("Arial", 7), fg="orange")
+        info_label.pack(anchor="w", pady=(5,0))
+
+        # Tagline row
+        tagline = tk.Label(self.left_frame, text="Manage and transform your media", font=("Arial", 8), fg="gray")
+        tagline.grid(row=next_row+5, column=0, columnspan=2, pady=9)
 
         # File listbox
         self.listbox = tk.Listbox(self.right_frame, selectmode="extended")
@@ -116,7 +143,7 @@ class VideoConverterApp:
         self.output_frame = tk.Frame(self.right_frame)
         self.output_frame.pack(fill=tk.X, pady=5)
         
-        self.output_path_var = tk.StringVar(value="No output folder selected")
+        self.output_path_var = tk.StringVar(value="Select output folder first")
         tk.Label(self.output_frame, text="Output Folder:").pack(side=tk.LEFT)
         tk.Entry(self.output_frame, textvariable=self.output_path_var, state='readonly').pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         
@@ -168,7 +195,8 @@ class VideoConverterApp:
     def add_files_dialog(self):
         """Open file dialog to add files"""
         files = filedialog.askopenfilenames(
-            filetypes=[("All supported files", "*.webp *.gif *.mp4 *.mkv *.webm"), 
+            filetypes=[("All supported files", "*.webp *.gif *.mp4 *.mkv *.webm *.wav *.flac *.aac *.mp3 *.ogg *.wma *.m4a *.aiff *.ac3"),
+                      ("Audio files", "*.wav *.flac *.aac *.mp3 *.ogg *.wma *.m4a *.aiff *.ac3"),
                       ("WebP files", "*.webp"),
                       ("GIF files", "*.gif"),
                       ("MP4 files", "*.mp4"),
@@ -305,8 +333,8 @@ class VideoConverterApp:
                     command = (
                         f'"{FFMPEG_PATH}" -i "{input_path}" '
                         f'-map 0:v:0 -map 0:a:{audio_index} -sn '
-                        f'-vf "scale=720:-2,fps=25,setsar=1" '
-                        f'-c:v libxvid -vtag XVID -b:v 1500k -maxrate 1800k -bufsize 2000k -bf 2 -trellis 1 -threads 0 '
+                        f'-vf "scale=720:-2:flags=lanczos,fps=24000/1001,setsar=1" '
+                        f'{self.get_xvid_video_settings()} '
                         f'-af "adelay={audio_delay_ms}|{audio_delay_ms}" '
                         f'-c:a libmp3lame -b:a 192k -ar 48000 -ac 2 '
                         f'-shortest '
@@ -319,8 +347,8 @@ class VideoConverterApp:
                     command = (
                         f'"{FFMPEG_PATH}" -i "{input_path}" '
                         f'-map 0:v:0 -map 0:a:{audio_index} -sn '
-                        f'-vf "scale=720:-2,fps=25,setsar=1" '
-                        f'-c:v libxvid -vtag XVID -b:v 1500k -maxrate 1800k -bufsize 2000k -bf 2 -trellis 1 -threads 0 '
+                        f'-vf "scale=720:-2:flags=lanczos,fps=24000/1001,setsar=1" '
+                        f'{self.get_xvid_video_settings()} '
                         f'-c:a libmp3lame -b:a 192k -ar 48000 -ac 2 '
                         f'-y "{output_file}"'
                     )
@@ -338,6 +366,37 @@ class VideoConverterApp:
             status = "Stopped" if self.stopped else "Completed"
             self.status_label.config(text=f"{status}! Successfully converted {successful}/{total_files} files.")
             self.log_message(f"Old Device conversion {status.lower()}. {successful}/{total_files} files converted.")
+
+    def get_xvid_video_settings(self):
+        """Return video settings string based on selected quality preset"""
+        quality = self.quality_var.get()
+        
+        if quality == "low":
+            # FAST: No rate-distortion, simpler comparison, lower bitrate
+            settings = (
+                f'-c:v libxvid -vtag XVID '
+                f'-b:v 1500k -maxrate 1700k -bufsize 2000k '
+                f'-bf 0 -g 250 -trellis 0 -threads 0'
+            )
+            self.log_message("Using LOW quality preset (1500k - FAST, USB compatible)")
+        elif quality == "optimal":
+            # BALANCED: Rate-distortion OFF, but keep trellis and good comparison
+            settings = (
+                f'-c:v libxvid -vtag XVID '
+                f'-b:v 2000k -maxrate 2500k -bufsize 3000k '
+                f'-bf 0 -g 250 -trellis 1 -cmp 256 -threads 0'
+            )
+            self.log_message("Using OPTIMAL quality preset (2000k - BALANCED speed/quality)")
+        else:  # high
+            # MAX QUALITY: All optimizations enabled (slower)
+            settings = (
+                f'-c:v libxvid -vtag XVID '
+                f'-b:v 3000k -maxrate 4000k -bufsize 8000k '
+                f'-bf 0 -g 250 -mbd rd -cmp 256 -trellis 1 -threads 0'
+            )
+            self.log_message("Using HIGH quality preset (3000k - SLOW, best quality for DVD)")
+        
+        return settings
 
     def convert_webm_to_mp4_command(self):
         """Handle WebM to MP4 conversion"""
@@ -714,20 +773,25 @@ class VideoConverterApp:
             self.log_message(f"Conversion {status.lower()}. {successful}/{total_files} files converted.")
 
     def convert_mp4_to_gif_command(self):
-        """Convert MP4 to GIF using FFmpeg"""
-        self.run_ffmpeg_conversion(
-            'ffmpeg -i "{input}" -vf "fps=30,scale=480:-1:flags=lanczos" "{output}"',
-            ".mp4",
-            ".gif"
-        )
+        if not self.validate_prerequisites() or not self.has_ffmpeg():
+            return
+        self.stopped = False
+        self.conversion_thread = threading.Thread(
+            target=self.process_ffmpeg_conversions,
+            args=('ffmpeg -i "{input}" -vf "fps=30,scale=480:-1:flags=lanczos" "{output}"', '.mp4', '.gif'),
+            daemon=True
+        ).start()
 
     def convert_gif_to_mp4_command(self):
-        """Convert GIF to MP4 using FFmpeg"""
-        self.run_ffmpeg_conversion(
-            'ffmpeg -i "{input}" -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -pix_fmt yuv420p -c:v libx264 -movflags faststart "{output}"',
-            ".gif",
-            ".mp4"
+        if not self.validate_prerequisites() or not self.has_ffmpeg():
+            return
+        self.stopped = False
+        self.conversion_thread = threading.Thread(
+            target=self.process_ffmpeg_conversions,
+            args=('ffmpeg -i "{input}" -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -pix_fmt yuv420p -c:v libx264 -movflags faststart "{output}"', '.gif', '.mp4'),
+            daemon=True
         )
+        self.conversion_thread.start()
 
     def convert_mp4_to_webm_command(self):
         """Convert MP4 to WebM using FFmpeg"""
@@ -1307,8 +1371,9 @@ if __name__ == "__main__":
     # Create root window with drag-and-drop support if available
     if HAS_DND:
         root = TkinterDnD.Tk()
+        ttk.Style(theme="minty")
     else:
-        root = tk.Tk()
+        root = ttk.Window(themename="minty")
     
     app = VideoConverterApp(root)
     root.mainloop()
